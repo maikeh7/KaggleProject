@@ -1,0 +1,214 @@
+---
+title: "R Notebook"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+Code for housing data.
+
+```{r, include=FALSE}
+###YOU MUST RUN THIS FUNCTION TO GET THE PLOTS!
+# Multiple plot function
+#
+# ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
+# - cols:   Number of columns in layout
+# - layout: A matrix specifying the layout. If present, 'cols' is ignored.
+#
+# If the layout is something like matrix(c(1,2,3,3), nrow=2, byrow=TRUE),
+# then plot 1 will go in the upper left, 2 will go in the upper right, and
+# 3 will go all the way across the bottom.
+#
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+  
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+  
+  numPlots = length(plots)
+  
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                     ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+  
+  if (numPlots==1) {
+    print(plots[[1]])
+    
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+    
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+      
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+
+
+```
+
+```{r}
+#read in data and inspect it
+housingdat = read.csv("train.csv")
+names(housingdat)
+
+#get your data (you need to adjust for whichever variables you were assigned. I had 40 thru 60)
+housing = housingdat[, 40:60]
+names(housing)
+str(housing)
+
+
+#how many NA values do we have?
+NaData = apply(housing, 2, function(x) sum(is.na(x)))
+NaData
+```
+
+FireplaceQu = NA means no fireplace. We may consider changing this to "none". 
+GarageYrBlt = NA likely means there is no information available. We should probably leave this as NA.
+GarageType = NA means no garage. We may consider changing this to "none".
+
+```{r}
+#get logical list (and then convert to vector) to get names of integer and factor valued variables
+library(purrr)
+library(dplyr)
+# housing %>% 
+str(mtcars)
+m = housing %>% 
+  map(is.factor)
+um = unlist(m)
+
+yesfactor = um[um == TRUE]
+yesinteger = um[um == FALSE]
+```
+
+Split data into 2 datasets-1 with factor-valued variables and another with numeric variables.
+```{r}
+########################################################
+#function to get a list of integer and factor variables
+########################################################
+my_integers = list(NULL)
+my_factors = list(NULL)
+for (i in seq_along(names(housing))){
+  if (class(housing[,i]) == "integer"){
+    my_integers[[i]] = housing[,i]
+  }
+  else if (class(housing[,i]) == "factor"){
+    my_factors[[i]] = housing[, i]
+  }
+}
+```
+
+Do more manipulation to extract the 2 datasets
+```{r}
+# Now we have to get rid of null entries
+m = lapply(my_integers, function(x) is.null(x))
+n = lapply(my_factors, function(x) is.null(x))
+onlyints = my_integers[m == FALSE]
+onlyfactors = my_factors[n == FALSE]
+
+#make the lists into a dataframe
+intsdf = as.data.frame(onlyints)
+factsdf = as.data.frame(onlyfactors)
+intnames = names(yesinteger)
+factnames = names(yesfactor)
+
+#assign proper names to variables!
+names(intsdf) = intnames
+names(factsdf) = factnames
+names(intsdf)
+names(factsdf)
+```
+
+```{r}
+#################################################################################################
+# now we can create a function to output boxplots and histograms of integer and factor variables.
+#################################################################################################
+library(ggplot2)
+#integer valued variable plots (boxplots)
+myplots_ints = function(data){
+  allvars=names(data)
+  varcols = ncol(data)
+  varnames = allvars
+  listofplots=list(NULL)
+  for (i in seq_along(varnames)){
+    listofplots[[i]]=
+      ggplot(data, aes_string(x = factor(1), y = varnames[i])) + 
+      geom_boxplot(width = .8) + 
+      theme(axis.title.x = element_blank(),
+            plot.margin = unit(c(1,1,1,1), "cm"), 
+            axis.title.y = element_text(size=12))
+  }
+  return(listofplots)
+}
+
+#run funciton on intsdf and get lots of boxplots
+try1 = myplots_ints(intsdf)
+multiplot(plotlist = try1[1:6], cols = 3)
+multiplot(plotlist = try1[7:12], cols = 3)
+multiplot(plotlist = try1[13:18], cols = 3)
+
+```
+
+Do the same for factor variables. Generally, data is fairly unbalanced.
+
+```{r}
+#histogram function for factor valued variables
+myplots_facts = function(data){
+  allvars=names(data)
+  varcols = ncol(data)
+  varnames = allvars
+  listofplots=list(NULL)
+  for (i in seq_along(varnames)){
+    listofplots[[i]]=
+      ggplot(data, aes_string(varnames[i])) + 
+      geom_histogram(stat = "count") + 
+      theme(
+            plot.margin = unit(c(1,1,1,1), "cm"), 
+            axis.title.x = element_text(size=12))
+  }
+  return(listofplots)
+}
+
+
+# run on the factor dataframe
+try2 = myplots_facts(factsdf)
+multiplot(plotlist = try2[1:6], cols = 3)
+multiplot(plotlist = try2[7:12], cols = 3)
+#multiplot(plotlist = try2[13:18], cols = 3)
+
+```
+
+Do some variable selection with random forests.
+```{r}
+library(randomForest)
+
+housenames = names(housingdat)
+paste(housenames,collapse = "+")
+```
+
+X2ndFlrSF and GRLivArea and ScreenPorch appear to be among the most important variables.
+
+```{r}
+myRF = randomForest(SalePrice ~ MSSubClass+MSZoning+LotFrontage+LotArea+Street+Alley+LotShape+LandContour+Utilities+LotConfig+LandSlope+
+                      Neighborhood+Condition1+Condition2+BldgType+HouseStyle+OverallQual+OverallCond+YearBuilt+YearRemodAdd+RoofStyle+
+                      RoofMatl+Exterior1st+Exterior2nd+MasVnrType+MasVnrArea +ExterQual+ExterCond+Foundation+BsmtQual+BsmtCond+BsmtExposure+
+                      BsmtFinType1+BsmtFinSF1+BsmtFinType2+BsmtFinSF2+BsmtUnfSF  +TotalBsmtSF+Heating+HeatingQC+CentralAir+Electrical+X1stFlrSF +
+                      KitchenQual+ TotRmsAbvGrd+Functional+Fireplaces+FireplaceQu+GarageType + 
+                      X2ndFlrSF+LowQualFinSF+GrLivArea+BsmtFullBath+BsmtHalfBath+FullBath+HalfBath+BedroomAbvGr+KitchenAbvGr + 
+                      +GarageYrBlt+GarageFinish+GarageCars+GarageArea+GarageQual + GarageCond+PavedDrive+WoodDeckSF +OpenPorchSF + EnclosedPorch+
+                      X3SsnPorch + ScreenPorch + PoolArea + MoSold,
+                      data = housingdat, na.action = na.omit)
+varImpPlot(myRF)
+```
+
